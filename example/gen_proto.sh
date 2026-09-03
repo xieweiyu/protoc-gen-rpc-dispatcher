@@ -4,19 +4,15 @@
 # 前置条件:
 #   1. 安装 protoc
 #   2. 安装 protoc-gen-go: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-#   3. 编译 protoc-gen-rpc-dispatcher: go build -o protoc-gen-rpc-dispatcher.exe ..
+#   3. 安装 protoc-gen-rpc-dispatcher: go install github.com/xieweiyu/protoc-gen-rpc-dispatcher@latest
 #
 # 使用方式:
 #   cd example
 #   bash gen_proto.sh
 
-# 插件路径
-PLUGIN="../protoc-gen-rpc-dispatcher.exe"
-
 protoc -I=./proto \
   -I="../proto" \
   --go_out=. --go_opt=module=example \
-  --plugin=protoc-gen-rpc-dispatcher="${PLUGIN}" \
   --rpc-dispatcher_out=. --rpc-dispatcher_opt=module=example \
   ./proto/*.proto
 
