@@ -2,7 +2,7 @@
 //
 // 安装:
 //
-//	go install github.com/loomy/protoc-gen-rpc-dispatcher@latest
+//	go install github.com/xieweiyu/protoc-gen-rpc-dispatcher@latest
 //
 // 用法:
 //
@@ -25,7 +25,7 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 
-	"github.com/loomy/protoc-gen-rpc-dispatcher/genrouter"
+	"github.com/xieweiyu/protoc-gen-rpc-dispatcher/genrouter"
 )
 
 func main() {

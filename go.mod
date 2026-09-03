@@ -1,4 +1,4 @@
-module github.com/loomy/protoc-gen-rpc-dispatcher
+module github.com/xieweiyu/protoc-gen-rpc-dispatcher
 
 go 1.26
 

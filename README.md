@@ -16,7 +16,7 @@ protoc 插件，从 proto 文件自动生成 RPC 调度器（Dispatcher）。
 ## 安装
 
 ```bash
-go install github.com/loomy/protoc-gen-rpc-dispatcher@latest
+go install github.com/xieweiyu/protoc-gen-rpc-dispatcher@latest
 ```
 
 ## 快速开始

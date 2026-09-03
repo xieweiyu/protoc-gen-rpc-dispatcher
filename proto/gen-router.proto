@@ -4,7 +4,7 @@ package genrouter;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/loomy/protoc-gen-rpc-dispatcher/genrouter;genrouter";
+option go_package = "github.com/xieweiyu/protoc-gen-rpc-dispatcher/genrouter;genrouter";
 
 // 标记一个 RPC 为 dispatcher 入口
 // 每个 service 中只能有一个 RPC 标记为 is_dispatcher = true
