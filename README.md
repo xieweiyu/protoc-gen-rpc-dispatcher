@@ -68,12 +68,9 @@ func (s *UserSvc) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginRes
 ```go
 dispatcher := userdispatcher.NewUserDispatcher(&UserSvc{})
 
+// CallAPI 直接作为 gRPC handler 使用，一行搞定
 func (s *UserSvc) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commonpb.APIResponse, error) {
-    data, err := dispatcher.Dispatch(ctx, req.Action, []byte(req.Params))
-    if err != nil {
-        return &commonpb.APIResponse{Code: 500, Message: err.Error()}, nil
-    }
-    return &commonpb.APIResponse{Code: 0, Data: data}, nil
+    return s.dispatcher.CallAPI(ctx, req)
 }
 ```
 
@@ -84,9 +81,9 @@ func (s *UserSvc) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commo
 | 生成物 | 说明 |
 |:---|:---|
 | `UserServer` 接口 | 你需要实现的业务接口 |
-| `UserDispatcher` 结构体 | 统一调度器 |
+| `UserDispatcher` 结构体 | 统一调度器，包含 `CallAPI` 方法 |
 | `NewUserDispatcher()` | 构造函数 |
-| `Dispatch(ctx, action, data)` | 根据 action 分发请求 |
+| `CallAPI(ctx, req)` | 直接作为 gRPC handler 使用，签名与 `CallAPI` 完全一致 |
 | `handleXxx()` | 每个 RPC 的 wrapper handler（自动 JSON 编解码） |
 
 ## 完整示例
@@ -101,7 +98,7 @@ func (s *UserSvc) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commo
 
 ```protobuf
 rpc CallAPI(APIRequest) returns (APIResponse) {
-  option (genrouter.is_dispatcher) = true;
+  option (gendispatcher.is_dispatcher) = true;
 }
 ```
 
