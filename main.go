@@ -158,9 +158,10 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 		g.P("//   }")
 	}
 	g.P("//")
-	g.P("//   // 在 CallAPI 中直接调用:")
-	g.P("//   dispatcher := ", pkgName, ".New", svc.Desc.Name(), "Dispatcher(&", svc.Desc.Name(), "Impl{...})")
-	g.P("//   dispatcher.CallAPI(ctx, req)  // 直接作为 gRPC handler 使用")
+	g.P("//   // 在 CallAPI 中直接使用:")
+	g.P("//   func (s *", svc.Desc.Name(), "Impl) CallAPI(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
+	g.P("//       return ", pkgName, ".CallAPI(s)(ctx, req)")
+	g.P("//   }")
 	g.P()
 
 	g.P("package ", pkgName)
@@ -186,56 +187,35 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 	g.P("}")
 	g.P()
 
-	// 生成 Dispatcher 结构体
-	g.P("// ", svc.Desc.Name(), "Dispatcher 实现 ", svc.Desc.Name(), " 服务的统一调度")
-	g.P("// 它的 CallAPI 方法可以直接作为 gRPC handler 使用")
-	g.P("type ", svc.Desc.Name(), "Dispatcher struct {")
-	g.P("    srv      ", svc.Desc.Name(), "Server")
-	g.P("    handlers map[string]func(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse")
-	g.P("}")
-	g.P()
-
-	// 构造函数
-	g.P("// New", svc.Desc.Name(), "Dispatcher 创建调度器")
-	g.P("func New", svc.Desc.Name(), "Dispatcher(srv ", svc.Desc.Name(), "Server) *", svc.Desc.Name(), "Dispatcher {")
-	g.P("    d := &", svc.Desc.Name(), "Dispatcher{")
-	g.P("        srv:      srv,")
-	g.P("        handlers: make(map[string]func(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse),")
-	g.P("    }")
+	// 生成 CallAPI 函数 — 返回一个可以直接使用的 handler
+	g.P("// CallAPI 返回一个完整的 CallAPI 处理函数")
+	g.P("// 传入业务接口实现，返回可直接作为 CallAPI 使用的 handler")
+	g.P("func CallAPI(srv ", svc.Desc.Name(), "Server) func(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
+	g.P("    handlers := map[string]func(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse{")
 	for _, rpc := range rpcs {
-		g.P("    d.handlers[\"", rpc.ActionName, "\"] = d.handle", rpc.Name)
+		g.P("        \"", rpc.ActionName, "\": func(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse {")
+		g.P("            req := &", pbAlias, ".", rpc.RequestType, "{}")
+		g.P("            if err := json.Unmarshal(data, req); err != nil {")
+		g.P("                return &", commonpbAlias, ".APIResponse{Code: 400, Message: fmt.Sprintf(\"json unmarshal error: %v\", err)}")
+		g.P("            }")
+		g.P("            res, err := srv.", rpc.Name, "(ctx, req)")
+		g.P("            if err != nil {")
+		g.P("                return &", commonpbAlias, ".APIResponse{Code: 500, Message: err.Error()}")
+		g.P("            }")
+		g.P("            d, _ := json.Marshal(res)")
+		g.P("            return &", commonpbAlias, ".APIResponse{Code: 0, Data: d}")
+		g.P("        },")
 	}
-	g.P("    return d")
-	g.P("}")
-	g.P()
-
-	// CallAPI 方法 — 直接作为 gRPC handler 使用
-	g.P("// CallAPI 实现了 gRPC 的 CallAPI 方法，根据 action 分发请求")
-	g.P("func (d *", svc.Desc.Name(), "Dispatcher) CallAPI(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
-	g.P("    handler, ok := d.handlers[req.Action]")
-	g.P("    if !ok {")
-	g.P("        return &", commonpbAlias, ".APIResponse{Code: 404, Message: \"action not found: \" + req.Action}, nil")
 	g.P("    }")
-	g.P("    return handler(ctx, []byte(req.Params)), nil")
-	g.P("}")
 	g.P()
-
-	// 每个 RPC 的 wrapper handler
-	for _, rpc := range rpcs {
-		g.P("func (d *", svc.Desc.Name(), "Dispatcher) handle", rpc.Name, "(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse {")
-		g.P("    req := &", pbAlias, ".", rpc.RequestType, "{}")
-		g.P("    if err := json.Unmarshal(data, req); err != nil {")
-		g.P("        return &", commonpbAlias, ".APIResponse{Code: 400, Message: fmt.Sprintf(\"json unmarshal error: %v\", err)}")
-		g.P("    }")
-		g.P("    res, err := d.srv.", rpc.Name, "(ctx, req)")
-		g.P("    if err != nil {")
-		g.P("        return &", commonpbAlias, ".APIResponse{Code: 500, Message: err.Error()}")
-		g.P("    }")
-		g.P("    data, _ := json.Marshal(res)")
-		g.P("    return &", commonpbAlias, ".APIResponse{Code: 0, Data: data}")
-		g.P("}")
-		g.P()
-	}
+	g.P("    return func(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
+	g.P("        handler, ok := handlers[req.Action]")
+	g.P("        if !ok {")
+	g.P("            return &", commonpbAlias, ".APIResponse{Code: 404, Message: \"action not found: \" + req.Action}, nil")
+	g.P("        }")
+	g.P("        return handler(ctx, []byte(req.Params)), nil")
+	g.P("    }")
+	g.P("}")
 
 	return nil
 }

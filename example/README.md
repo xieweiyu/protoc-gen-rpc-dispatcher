@@ -41,10 +41,7 @@ example/
 | 生成物 | 说明 |
 |:---|:---|
 | `UserServer` 接口 | 你需要实现的业务接口 |
-| `UserDispatcher` 结构体 | 统一调度器，包含 `CallAPI` 方法 |
-| `NewUserDispatcher(srv)` | 构造函数，接收业务接口实现 |
-| `CallAPI(ctx, req)` | 直接作为 gRPC handler 使用 |
-| `handleXxx()` | 每个 RPC 的 wrapper handler（自动 JSON 编解码） |
+| `CallAPI(srv)` 函数 | 传入业务实现，返回可直接使用的 CallAPI handler |
 
 ## 使用流程
 
@@ -62,23 +59,11 @@ func (s *userSvcImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*use
 }
 ```
 
-### 2. 创建 gRPC 服务，嵌入 dispatcher
+### 2. CallAPI 直接使用 `CallAPI(s)`，一行搞定
 
 ```go
-type userServer struct {
-    userpb.UnimplementedUserServer
-    dispatcher *userdispatcher.UserDispatcher
-}
-
-func newUserServer() *userServer {
-    return &userServer{
-        dispatcher: userdispatcher.NewUserDispatcher(&userSvcImpl{}),
-    }
-}
-
-// CallAPI 一行委托给 dispatcher
-func (s *userServer) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commonpb.APIResponse, error) {
-    return s.dispatcher.CallAPI(ctx, req)
+func (s *userSvcImpl) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commonpb.APIResponse, error) {
+    return userdispatcher.CallAPI(s)(ctx, req)
 }
 ```
 

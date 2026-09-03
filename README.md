@@ -63,14 +63,11 @@ func (s *UserSvc) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginRes
 }
 ```
 
-### 4. 在 CallAPI 中使用
+### 4. CallAPI 直接使用生成的调度函数，一行搞定
 
 ```go
-dispatcher := userdispatcher.NewUserDispatcher(&UserSvc{})
-
-// CallAPI 直接作为 gRPC handler 使用，一行搞定
 func (s *UserSvc) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commonpb.APIResponse, error) {
-    return s.dispatcher.CallAPI(ctx, req)
+    return userdispatcher.CallAPI(s)(ctx, req)
 }
 ```
 
@@ -81,10 +78,7 @@ func (s *UserSvc) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commo
 | 生成物 | 说明 |
 |:---|:---|
 | `UserServer` 接口 | 你需要实现的业务接口 |
-| `UserDispatcher` 结构体 | 统一调度器，包含 `CallAPI` 方法 |
-| `NewUserDispatcher()` | 构造函数 |
-| `CallAPI(ctx, req)` | 直接作为 gRPC handler 使用，签名与 `CallAPI` 完全一致 |
-| `handleXxx()` | 每个 RPC 的 wrapper handler（自动 JSON 编解码） |
+| `CallAPI(srv)` 函数 | 传入业务实现，返回可直接作为 gRPC handler 使用的函数 |
 
 ## 完整示例
 

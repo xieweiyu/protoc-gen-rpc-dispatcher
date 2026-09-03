@@ -14,9 +14,10 @@
 //       // 业务逻辑
 //   }
 //
-//   // 在 CallAPI 中直接调用:
-//   dispatcher := userdispatcher.NewUserDispatcher(&UserImpl{...})
-//   dispatcher.CallAPI(ctx, req)  // 直接作为 gRPC handler 使用
+//   // 在 CallAPI 中直接使用:
+//   func (s *UserImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
+//       return userdispatcher.CallAPI(s)(ctx, req)
+//   }
 
 package userdispatcher
 
@@ -35,55 +36,41 @@ type UserServer interface {
 	Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.LoginResponse, error)
 }
 
-// UserDispatcher 实现 User 服务的统一调度
-// 它的 CallAPI 方法可以直接作为 gRPC handler 使用
-type UserDispatcher struct {
-	srv      UserServer
-	handlers map[string]func(ctx context.Context, data []byte) *pb.APIResponse
-}
+// CallAPI 返回一个完整的 CallAPI 处理函数
+// 传入业务接口实现，返回可直接作为 CallAPI 使用的 handler
+func CallAPI(srv UserServer) func(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
+	handlers := map[string]func(ctx context.Context, data []byte) *pb.APIResponse{
+		"getUserInfo": func(ctx context.Context, data []byte) *pb.APIResponse {
+			req := &userpb.GetUserInfoRequest{}
+			if err := json.Unmarshal(data, req); err != nil {
+				return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
+			}
+			res, err := srv.GetUserInfo(ctx, req)
+			if err != nil {
+				return &pb.APIResponse{Code: 500, Message: err.Error()}
+			}
+			d, _ := json.Marshal(res)
+			return &pb.APIResponse{Code: 0, Data: d}
+		},
+		"login": func(ctx context.Context, data []byte) *pb.APIResponse {
+			req := &userpb.LoginRequest{}
+			if err := json.Unmarshal(data, req); err != nil {
+				return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
+			}
+			res, err := srv.Login(ctx, req)
+			if err != nil {
+				return &pb.APIResponse{Code: 500, Message: err.Error()}
+			}
+			d, _ := json.Marshal(res)
+			return &pb.APIResponse{Code: 0, Data: d}
+		},
+	}
 
-// NewUserDispatcher 创建调度器
-func NewUserDispatcher(srv UserServer) *UserDispatcher {
-	d := &UserDispatcher{
-		srv:      srv,
-		handlers: make(map[string]func(ctx context.Context, data []byte) *pb.APIResponse),
+	return func(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
+		handler, ok := handlers[req.Action]
+		if !ok {
+			return &pb.APIResponse{Code: 404, Message: "action not found: " + req.Action}, nil
+		}
+		return handler(ctx, []byte(req.Params)), nil
 	}
-	d.handlers["getUserInfo"] = d.handleGetUserInfo
-	d.handlers["login"] = d.handleLogin
-	return d
-}
-
-// CallAPI 实现了 gRPC 的 CallAPI 方法，根据 action 分发请求
-func (d *UserDispatcher) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-	handler, ok := d.handlers[req.Action]
-	if !ok {
-		return &pb.APIResponse{Code: 404, Message: "action not found: " + req.Action}, nil
-	}
-	return handler(ctx, []byte(req.Params)), nil
-}
-
-func (d *UserDispatcher) handleGetUserInfo(ctx context.Context, data []byte) *pb.APIResponse {
-	req := &userpb.GetUserInfoRequest{}
-	if err := json.Unmarshal(data, req); err != nil {
-		return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
-	}
-	res, err := d.srv.GetUserInfo(ctx, req)
-	if err != nil {
-		return &pb.APIResponse{Code: 500, Message: err.Error()}
-	}
-	data, _ = json.Marshal(res)
-	return &pb.APIResponse{Code: 0, Data: data}
-}
-
-func (d *UserDispatcher) handleLogin(ctx context.Context, data []byte) *pb.APIResponse {
-	req := &userpb.LoginRequest{}
-	if err := json.Unmarshal(data, req); err != nil {
-		return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
-	}
-	res, err := d.srv.Login(ctx, req)
-	if err != nil {
-		return &pb.APIResponse{Code: 500, Message: err.Error()}
-	}
-	data, _ := json.Marshal(res)
-	return &pb.APIResponse{Code: 0, Data: data}
 }
