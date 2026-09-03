@@ -71,7 +71,7 @@ func (d *UserDispatcher) handleGetUserInfo(ctx context.Context, data []byte) *pb
 	if err != nil {
 		return &pb.APIResponse{Code: 500, Message: err.Error()}
 	}
-	data, _ := json.Marshal(res)
+	data, _ = json.Marshal(res)
 	return &pb.APIResponse{Code: 0, Data: data}
 }
 
