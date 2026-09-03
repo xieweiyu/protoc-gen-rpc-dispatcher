@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package common;
+
+option go_package = "example/proto/common/pb;commonpb";
+
+message APIRequest {
+  string action = 1;
+  string params = 2;
+}
+
+message APIResponse {
+  int32 code = 1;
+  string message = 2;
+  bytes data = 3;
+}

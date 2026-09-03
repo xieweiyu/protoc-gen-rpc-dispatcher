@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package user;
+
+import "gen-router.proto";
+import "common.proto";
+
+option go_package = "example/proto/user/pb;userpb";
+
+// UserService 用户服务
+service User {
+  // 统一入口，标记为 dispatcher，protoc-gen-rpc-dispatcher 会跳过它
+  rpc CallAPI(common.APIRequest) returns (common.APIResponse) {
+    option (genrouter.is_dispatcher) = true;
+  }
+
+  // 获取用户信息 — 会被自动生成 wrapper handler
+  rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse);
+
+  // 用户登录 — 会被自动生成 wrapper handler
+  rpc Login(LoginRequest) returns (LoginResponse);
+}
+
+message GetUserInfoRequest {
+  string user_id = 1;
+}
+
+message GetUserInfoResponse {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string token = 2;
+  string nickname = 3;
+}
