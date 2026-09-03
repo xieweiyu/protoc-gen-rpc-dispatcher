@@ -24,12 +24,12 @@ go install github.com/xieweiyu/protoc-gen-rpc-dispatcher@latest
 ### 1. 在 proto 中定义服务
 
 ```protobuf
-import "gen-router.proto";
+import "gen-dispatcher.proto";
 
 service User {
   // 标记统一入口，插件会跳过这个 RPC
   rpc CallAPI(common.APIRequest) returns (common.APIResponse) {
-    option (genrouter.is_dispatcher) = true;
+option (gendispatcher.is_dispatcher) = true;
   }
 
   // 真正的业务 RPC，会被生成 wrapper handler

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package user;
 
-import "gen-router.proto";
+import "gen-dispatcher.proto";
 import "common.proto";
 
 option go_package = "example/proto/user/pb;userpb";
@@ -11,7 +11,7 @@ option go_package = "example/proto/user/pb;userpb";
 service User {
   // 统一入口，标记为 dispatcher，protoc-gen-rpc-dispatcher 会跳过它
   rpc CallAPI(common.APIRequest) returns (common.APIResponse) {
-    option (genrouter.is_dispatcher) = true;
+    option (gendispatcher.is_dispatcher) = true;
   }
 
   // 获取用户信息 — 会被自动生成 wrapper handler

@@ -1,5 +1,5 @@
-// Package genrouter 提供 protoc-gen-router 插件的选项解析
-package genrouter
+// Package gendispatcher 提供 protoc-gen-rpc-dispatcher 插件的选项解析
+package gendispatcher
 
 import (
 	"google.golang.org/protobuf/encoding/protowire"

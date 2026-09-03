@@ -1,14 +1,14 @@
 syntax = "proto2";
 
-package genrouter;
+package gendispatcher;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/xieweiyu/protoc-gen-rpc-dispatcher/genrouter;genrouter";
+option go_package = "github.com/xieweiyu/protoc-gen-rpc-dispatcher/gendispatcher;gendispatcher";
 
 // 标记一个 RPC 为 dispatcher 入口
 // 每个 service 中只能有一个 RPC 标记为 is_dispatcher = true
-// 这个 RPC 会被 protoc-gen-router 跳过，不生成 wrapper handler
+// 这个 RPC 会被 protoc-gen-rpc-dispatcher 跳过，不生成 wrapper handler
 extend google.protobuf.MethodOptions {
   optional bool is_dispatcher = 50001;
 }

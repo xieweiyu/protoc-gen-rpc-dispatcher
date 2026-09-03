@@ -25,7 +25,7 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 
-	"github.com/xieweiyu/protoc-gen-rpc-dispatcher/genrouter"
+	"github.com/xieweiyu/protoc-gen-rpc-dispatcher/gendispatcher"
 )
 
 func main() {
@@ -71,7 +71,7 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 
 		// 跳过标记为 is_dispatcher 的 RPC（用户定义的 dispatcher 入口）
 		methodOpts := method.Desc.Options().(*descriptorpb.MethodOptions)
-		if genrouter.IsDispatcherRPC(methodOpts) {
+		if gendispatcher.IsDispatcherRPC(methodOpts) {
 			continue
 		}
 
