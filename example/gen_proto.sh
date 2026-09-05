@@ -32,7 +32,7 @@ fi
 # 公共 proto 路径（gen-dispatcher.proto 所在目录）
 DISPATCHER_PROTO="${SCRIPT_DIR}/../proto"
 
-# 先生成 common.proto（只有 --go_out，没有 --micro_out，因为它没有 service）
+# 先生成 common.proto（只有 --go_out，没有 service 不需要 micro/dispatcher）
 protoc -I=./proto \
   -I="${DISPATCHER_PROTO}" \
   ${PROTO_INCLUDE:+"$PROTO_INCLUDE"} \
