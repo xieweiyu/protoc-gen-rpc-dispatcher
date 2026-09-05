@@ -6,12 +6,11 @@ import (
 	"net"
 
 	"example/proto/common/pb"
-	"example/proto/user/dispatcher"
 	userpb "example/proto/user/pb"
 	"google.golang.org/grpc"
 )
 
-// 1. 实现业务接口（由 protoc-gen-rpc-dispatcher 生成的 UserServer）
+// 1. 实现业务接口（UserServer 由 protoc-gen-rpc-dispatcher 生成，与 userpb 同包）
 type userSvcImpl struct{}
 
 func (s *userSvcImpl) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest) (*userpb.GetUserInfoResponse, error) {
@@ -32,7 +31,7 @@ func (s *userSvcImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*use
 
 // 2. CallAPI 直接使用生成的调度函数，一行搞定
 func (s *userSvcImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-	return dispatcher.CallAPI(s)(ctx, req)
+	return userpb.CallAPI(s)(ctx, req)
 }
 
 // 3. 启动 gRPC 服务

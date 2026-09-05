@@ -32,16 +32,18 @@ example/
     ├── common.pb.go
     ├── user.pb.go
     └── user/
-        └── dispatcher/
-            └── user_dispatcher_gen.go  ← 自动生成的调度器
+        └── pb/
+            ├── user.pb.go                  ← protoc-gen-go
+            ├── user.pb.micro.go            ← protoc-gen-micro
+            └── user_dispatcher_gen.go      ← protoc-gen-rpc-dispatcher（与 pb 同包）
 ```
 
 ### `user_dispatcher_gen.go` 包含：
 
 | 生成物 | 说明 |
 |:---|:---|
-| `UserServer` 接口 | 你需要实现的业务接口 |
-| `CallAPI(srv)` 函数 | 传入业务实现，返回可直接使用的 CallAPI handler |
+| `UserServer` 接口 | 你需要实现的业务接口（与 pb 同包，无需额外 import） |
+| `CallAPI(srv)` 函数 | 传入业务实现，返回可直接作为 gRPC handler 使用的函数 |
 
 ## 使用流程
 
@@ -63,7 +65,7 @@ func (s *userSvcImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*use
 
 ```go
 func (s *userSvcImpl) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commonpb.APIResponse, error) {
-    return userdispatcher.CallAPI(s)(ctx, req)
+    return userpb.CallAPI(s)(ctx, req)
 }
 ```
 

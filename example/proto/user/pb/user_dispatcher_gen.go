@@ -7,33 +7,32 @@
 //   type UserImpl struct {
 //       // 你的业务依赖
 //   }
-//   func (s *UserImpl) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest) (*userpb.GetUserInfoResponse, error) {
+//   func (s *UserImpl) GetUserInfo(ctx context.Context, req *GetUserInfoRequest) (*GetUserInfoResponse, error) {
 //       // 业务逻辑
 //   }
-//   func (s *UserImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.LoginResponse, error) {
+//   func (s *UserImpl) Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error) {
 //       // 业务逻辑
 //   }
 //
-//   // 在 CallAPI 中直接使用:
+//   // 在 CallAPI 中直接使用（CallAPI 与业务代码同包，无需额外 import）:
 //   func (s *UserImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-//       return userdispatcher.CallAPI(s)(ctx, req)
+//       return CallAPI(s)(ctx, req)
 //   }
 
-package userdispatcher
+package userpb
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
-	userpb "example/proto/user/pb"
 	pb "example/proto/common/pb"
 )
 
 // UserServer 是 User 服务需要实现的业务接口
 type UserServer interface {
-	GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest) (*userpb.GetUserInfoResponse, error)
-	Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.LoginResponse, error)
+	GetUserInfo(ctx context.Context, req *GetUserInfoRequest) (*GetUserInfoResponse, error)
+	Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error)
 }
 
 // CallAPI 返回一个完整的 CallAPI 处理函数
@@ -41,7 +40,7 @@ type UserServer interface {
 func CallAPI(srv UserServer) func(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
 	handlers := map[string]func(ctx context.Context, data []byte) *pb.APIResponse{
 		"getUserInfo": func(ctx context.Context, data []byte) *pb.APIResponse {
-			req := &userpb.GetUserInfoRequest{}
+			req := &GetUserInfoRequest{}
 			if err := json.Unmarshal(data, req); err != nil {
 				return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
 			}
@@ -53,7 +52,7 @@ func CallAPI(srv UserServer) func(ctx context.Context, req *pb.APIRequest) (*pb.
 			return &pb.APIResponse{Code: 0, Data: d}
 		},
 		"login": func(ctx context.Context, data []byte) *pb.APIResponse {
-			req := &userpb.LoginRequest{}
+			req := &LoginRequest{}
 			if err := json.Unmarshal(data, req); err != nil {
 				return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
 			}

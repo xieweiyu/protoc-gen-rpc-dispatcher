@@ -67,13 +67,15 @@ func (s *UserSvc) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginRes
 
 ```go
 func (s *UserSvc) CallAPI(ctx context.Context, req *commonpb.APIRequest) (*commonpb.APIResponse, error) {
-    return userdispatcher.CallAPI(s)(ctx, req)
+    return userpb.CallAPI(s)(ctx, req)
 }
 ```
 
+> `CallAPI` 函数生成在 `go_package` 指定的同一个包里（如 `userpb`），无需额外 import。
+
 ## 生成的代码
 
-对于每个 proto service，会生成一个 `xxx_dispatcher_gen.go` 文件，包含：
+对于每个 proto service，会生成一个 `xxx_dispatcher_gen.go` 文件（与 pb 文件同目录同包），包含：
 
 | 生成物 | 说明 |
 |:---|:---|
