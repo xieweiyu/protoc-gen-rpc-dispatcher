@@ -15,38 +15,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# 自动检测 protobuf 的 include 路径
-PROTO_INCLUDE=""
-PROTOC_DIR=$(dirname "$(which protoc)")/../include
-if [ -d "$PROTOC_DIR/google/protobuf" ]; then
-  PROTO_INCLUDE="-I=${PROTOC_DIR}"
-else
-  for dir in /usr/include /usr/local/include /usr/local/opt/protobuf/include; do
-    if [ -d "$dir/google/protobuf" ]; then
-      PROTO_INCLUDE="-I=${dir}"
-      break
-    fi
-  done
-fi
-
 # 公共 proto 路径（gen-dispatcher.proto 所在目录）
 DISPATCHER_PROTO="${SCRIPT_DIR}/../proto"
 
-# 先生成 common.proto（只有 --go_out，没有 service 不需要 micro/dispatcher）
-protoc -I=./proto \
-  -I="${DISPATCHER_PROTO}" \
-  ${PROTO_INCLUDE:+"$PROTO_INCLUDE"} \
-  --go_out=. --go_opt=module=example \
-  ./proto/common.proto
-
-# 再生成 user.proto（包含所有插件）
-protoc -I=./proto \
-  -I="${DISPATCHER_PROTO}" \
-  ${PROTO_INCLUDE:+"$PROTO_INCLUDE"} \
-  --go_out=. --go_opt=module=example \
-  --micro_out=. --micro_opt=module=example \
-  --rpc-dispatcher_out=. --rpc-dispatcher_opt=module=example \
-  ./proto/user.proto
+# 逐个生成每个 proto 文件
+# - 没有 service 的 proto（如 common.proto）micro/dispatcher 插件会自动跳过
+for proto in ./proto/*.proto; do
+  echo "── 生成 ${proto} ..."
+  protoc -I=./proto \
+    -I="${DISPATCHER_PROTO}" \
+    --go_out=. --go_opt=module=example \
+    --micro_out=. --micro_opt=module=example \
+    --rpc-dispatcher_out=. --rpc-dispatcher_opt=module=example \
+    "${proto}"
+done
 
 echo ""
 echo "✓ 生成完成!"
