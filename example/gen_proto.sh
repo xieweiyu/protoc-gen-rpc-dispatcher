@@ -8,8 +8,8 @@
 #   4. 安装 protoc-gen-rpc-dispatcher: go install github.com/xieweiyu/protoc-gen-rpc-dispatcher@latest
 #
 # 路径说明:
-#   --go_out / --rpc-dispatcher_out: 用 module=example 模式，输出到 go_package 目录
-#   --micro_out: 不带任何 opt，protoc-gen-micro v1.0.0 直接用 go_package 作为输出路径
+#   --go_out / --rpc-dispatcher_out: 用 module=example 模式，输出到 example 目录
+#   --micro_out: 不带任何 opt，指向项目根，protoc-gen-micro v1.0.0 会用 go_package 路径
 #
 # 使用方式:
 #   cd example && bash gen_proto.sh
@@ -33,18 +33,26 @@ for proto in ./proto/*.proto; do
   if grep -q "^service " "${proto}"; then
     protoc -I=./proto \
       -I="${DISPATCHER_PROTO}" \
-      --go_out="${PROJECT_ROOT}" --go_opt=module=example \
+      --go_out="${SCRIPT_DIR}" --go_opt=module=example \
       --micro_out="${PROJECT_ROOT}" \
-      --rpc-dispatcher_out="${PROJECT_ROOT}" --rpc-dispatcher_opt=module=example \
+      --rpc-dispatcher_out="${SCRIPT_DIR}" --rpc-dispatcher_opt=module=example \
       "${proto}"
   else
     # 无 service 的文件只需要 go 代码
     protoc -I=./proto \
       -I="${DISPATCHER_PROTO}" \
-      --go_out="${PROJECT_ROOT}" --go_opt=module=example \
+      --go_out="${SCRIPT_DIR}" --go_opt=module=example \
       "${proto}"
   fi
 done
+
+
+# 获取脚本所在目录（example/）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# 项目根目录（example 的上一级）
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo ""
 echo "✓ 生成完成!"

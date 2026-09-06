@@ -14,9 +14,14 @@
 //       // 业务逻辑
 //   }
 //
-//   // 在 CallAPI 中直接使用（CallAPI 与业务代码同包，无需额外 import）:
+//   // 启动时注册业务实现:
+//   func init() {
+//       userpb.Register(&UserImpl{...})
+//   }
+//
+//   // CallAPI 中直接调用:
 //   func (s *UserImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-//       return CallAPI(s)(ctx, req)
+//       return userpb.CallAPI(ctx, req)
 //   }
 
 package userpb
@@ -35,41 +40,55 @@ type UserServer interface {
 	Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error)
 }
 
-// CallAPI 返回一个完整的 CallAPI 处理函数
-// 传入业务接口实现，返回可直接作为 CallAPI 使用的 handler
-func CallAPI(srv UserServer) func(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-	handlers := map[string]func(ctx context.Context, data []byte) *pb.APIResponse{
-		"getUserInfo": func(ctx context.Context, data []byte) *pb.APIResponse {
-			req := &GetUserInfoRequest{}
-			if err := json.Unmarshal(data, req); err != nil {
-				return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
-			}
-			res, err := srv.GetUserInfo(ctx, req)
-			if err != nil {
-				return &pb.APIResponse{Code: 500, Message: err.Error()}
-			}
-			d, _ := json.Marshal(res)
-			return &pb.APIResponse{Code: 0, Data: d}
-		},
-		"login": func(ctx context.Context, data []byte) *pb.APIResponse {
-			req := &LoginRequest{}
-			if err := json.Unmarshal(data, req); err != nil {
-				return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}
-			}
-			res, err := srv.Login(ctx, req)
-			if err != nil {
-				return &pb.APIResponse{Code: 500, Message: err.Error()}
-			}
-			d, _ := json.Marshal(res)
-			return &pb.APIResponse{Code: 0, Data: d}
-		},
-	}
+// HandlerWrap 是一个 action 处理函数
+type HandlerWrap func(ctx context.Context, data []byte) (*pb.APIResponse, error)
 
-	return func(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-		handler, ok := handlers[req.Action]
-		if !ok {
-			return &pb.APIResponse{Code: 404, Message: "action not found: " + req.Action}, nil
-		}
-		return handler(ctx, []byte(req.Params)), nil
+var (
+	srv      UserServer
+	handlers = make(map[string]HandlerWrap)
+)
+
+// Register 注册业务实现，必须在服务启动时调用
+func Register(s UserServer) {
+	srv = s
+}
+
+func init() {
+	handlers["getUserInfo"] = handleGetUserInfo
+	handlers["login"] = handleLogin
+}
+
+func handleGetUserInfo(ctx context.Context, data []byte) (*pb.APIResponse, error) {
+	req := &GetUserInfoRequest{}
+	if err := json.Unmarshal(data, req); err != nil {
+		return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}, nil
 	}
+	res, err := srv.GetUserInfo(ctx, req)
+	if err != nil {
+		return &pb.APIResponse{Code: 500, Message: err.Error()}, nil
+	}
+	d, _ := json.Marshal(res)
+	return &pb.APIResponse{Code: 0, Data: d}, nil
+}
+
+func handleLogin(ctx context.Context, data []byte) (*pb.APIResponse, error) {
+	req := &LoginRequest{}
+	if err := json.Unmarshal(data, req); err != nil {
+		return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}, nil
+	}
+	res, err := srv.Login(ctx, req)
+	if err != nil {
+		return &pb.APIResponse{Code: 500, Message: err.Error()}, nil
+	}
+	d, _ := json.Marshal(res)
+	return &pb.APIResponse{Code: 0, Data: d}, nil
+}
+
+// CallAPI 根据 action 分发请求，是统一的调度入口
+func CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
+	handler, ok := handlers[req.Action]
+	if !ok {
+		return &pb.APIResponse{Code: 404, Message: "action not found: " + req.Action}, nil
+	}
+	return handler(ctx, []byte(req.Params))
 }

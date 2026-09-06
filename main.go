@@ -152,9 +152,14 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 		g.P("//   }")
 	}
 	g.P("//")
-	g.P("//   // 在 CallAPI 中直接使用（CallAPI 与业务代码同包，无需额外 import）:")
+	g.P("//   // 启动时注册业务实现:")
+	g.P("//   func init() {")
+	g.P("//       ", pkgName, ".Register(&", svc.Desc.Name(), "Impl{...})")
+	g.P("//   }")
+	g.P("//")
+	g.P("//   // CallAPI 中直接调用:")
 	g.P("//   func (s *", svc.Desc.Name(), "Impl) CallAPI(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
-	g.P("//       return CallAPI(s)(ctx, req)")
+	g.P("//       return ", pkgName, ".CallAPI(ctx, req)")
 	g.P("//   }")
 	g.P()
 
@@ -180,34 +185,56 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 	g.P("}")
 	g.P()
 
-	// 生成 CallAPI 函数 — 返回一个可以直接使用的 handler
-	g.P("// CallAPI 返回一个完整的 CallAPI 处理函数")
-	g.P("// 传入业务接口实现，返回可直接作为 CallAPI 使用的 handler")
-	g.P("func CallAPI(srv ", svc.Desc.Name(), "Server) func(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
-	g.P("    handlers := map[string]func(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse{")
-	for _, rpc := range rpcs {
-		g.P("        \"", rpc.ActionName, "\": func(ctx context.Context, data []byte) *", commonpbAlias, ".APIResponse {")
-		g.P("            req := &", rpc.RequestType, "{}")
-		g.P("            if err := json.Unmarshal(data, req); err != nil {")
-		g.P("                return &", commonpbAlias, ".APIResponse{Code: 400, Message: fmt.Sprintf(\"json unmarshal error: %v\", err)}")
-		g.P("            }")
-		g.P("            res, err := srv.", rpc.Name, "(ctx, req)")
-		g.P("            if err != nil {")
-		g.P("                return &", commonpbAlias, ".APIResponse{Code: 500, Message: err.Error()}")
-		g.P("            }")
-		g.P("            d, _ := json.Marshal(res)")
-		g.P("            return &", commonpbAlias, ".APIResponse{Code: 0, Data: d}")
-		g.P("        },")
-	}
-	g.P("    }")
+	// 生成全局 handlers map 和 srv 变量
+	g.P("// HandlerWrap 是一个 action 处理函数")
+	g.P("type HandlerWrap func(ctx context.Context, data []byte) (*", commonpbAlias, ".APIResponse, error)")
 	g.P()
-	g.P("    return func(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
-	g.P("        handler, ok := handlers[req.Action]")
-	g.P("        if !ok {")
-	g.P("            return &", commonpbAlias, ".APIResponse{Code: 404, Message: \"action not found: \" + req.Action}, nil")
-	g.P("        }")
-	g.P("        return handler(ctx, []byte(req.Params)), nil")
+	g.P("var (")
+	g.P("    srv      ", svc.Desc.Name(), "Server")
+	g.P("    handlers = make(map[string]HandlerWrap)")
+	g.P(")")
+	g.P()
+
+	// 生成 Register 函数
+	g.P("// Register 注册业务实现，必须在服务启动时调用")
+	g.P("func Register(s ", svc.Desc.Name(), "Server) {")
+	g.P("    srv = s")
+	g.P("}")
+	g.P()
+
+	// 生成 init() 注册所有 action
+	g.P("func init() {")
+	for _, rpc := range rpcs {
+		g.P("    handlers[\"", rpc.ActionName, "\"] = handle", rpc.Name)
+	}
+	g.P("}")
+	g.P()
+
+	// 生成每个 RPC 的独立 handler 函数
+	for _, rpc := range rpcs {
+		g.P("func handle", rpc.Name, "(ctx context.Context, data []byte) (*", commonpbAlias, ".APIResponse, error) {")
+		g.P("    req := &", rpc.RequestType, "{}")
+		g.P("    if err := json.Unmarshal(data, req); err != nil {")
+		g.P("        return &", commonpbAlias, ".APIResponse{Code: 400, Message: fmt.Sprintf(\"json unmarshal error: %v\", err)}, nil")
+		g.P("    }")
+		g.P("    res, err := srv.", rpc.Name, "(ctx, req)")
+		g.P("    if err != nil {")
+		g.P("        return &", commonpbAlias, ".APIResponse{Code: 500, Message: err.Error()}, nil")
+		g.P("    }")
+		g.P("    d, _ := json.Marshal(res)")
+		g.P("    return &", commonpbAlias, ".APIResponse{Code: 0, Data: d}, nil")
+		g.P("}")
+		g.P()
+	}
+
+	// 生成 CallAPI 分发函数
+	g.P("// CallAPI 根据 action 分发请求，是统一的调度入口")
+	g.P("func CallAPI(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
+	g.P("    handler, ok := handlers[req.Action]")
+	g.P("    if !ok {")
+	g.P("        return &", commonpbAlias, ".APIResponse{Code: 404, Message: \"action not found: \" + req.Action}, nil")
 	g.P("    }")
+	g.P("    return handler(ctx, []byte(req.Params))")
 	g.P("}")
 
 	return nil

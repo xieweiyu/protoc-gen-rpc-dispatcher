@@ -29,12 +29,17 @@ func (s *userSvcImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*use
 	}, nil
 }
 
-// 2. CallAPI 直接使用生成的调度函数，一行搞定
-func (s *userSvcImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-	return userpb.CallAPI(s)(ctx, req)
+// 2. 启动时注册业务实现，一行搞定
+func init() {
+	userpb.Register(&userSvcImpl{})
 }
 
-// 3. 启动 gRPC 服务
+// 3. CallAPI 直接使用生成的调度函数
+func (s *userSvcImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
+	return userpb.CallAPI(ctx, req)
+}
+
+// 4. 启动 gRPC 服务
 func main() {
 	lis, err := net.Listen("tcp", ":8080")
 	if err != nil {
