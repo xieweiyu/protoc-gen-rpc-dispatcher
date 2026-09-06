@@ -23,8 +23,6 @@ cd "$SCRIPT_DIR"
 # 项目根目录（example 的上一级）
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# 公共 proto 路径（gen-dispatcher.proto 所在目录）
-DISPATCHER_PROTO="${PROJECT_ROOT}/proto"
 
 for proto in ./proto/*.proto; do
   echo "── 生成 ${proto} ..."
@@ -32,16 +30,16 @@ for proto in ./proto/*.proto; do
   # 判断是否包含 service（只有包含 service 才需要 micro/dispatcher）
   if grep -q "^service " "${proto}"; then
     protoc -I=./proto \
-      -I="${DISPATCHER_PROTO}" \
-      --go_out="${SCRIPT_DIR}" --go_opt=module=example \
-      --micro_out="${PROJECT_ROOT}" \
-      --rpc-dispatcher_out="${SCRIPT_DIR}" --rpc-dispatcher_opt=module=example \
+      -I=../proto \
+      --go_out=./ --go_opt=module=example \
+      --micro_out=../  \
+      --rpc-dispatcher_out=./ --rpc-dispatcher_opt=module=example \
       "${proto}"
   else
     # 无 service 的文件只需要 go 代码
     protoc -I=./proto \
-      -I="${DISPATCHER_PROTO}" \
-      --go_out="${SCRIPT_DIR}" --go_opt=module=example \
+      -I=../proto \
+      --go_out=./ --go_opt=module=example \
       "${proto}"
   fi
 done

@@ -1,19 +1,22 @@
-package main
+﻿package main
 
 import (
 	"context"
 	"log"
-	"net"
 
-	"example/proto/common/pb"
+	commonpb "example/proto/common/pb"
 	userpb "example/proto/user/pb"
-	"google.golang.org/grpc"
+	"go-micro.dev/v4"
 )
 
-// 1. 实现业务接口（UserServer 由 protoc-gen-rpc-dispatcher 生成，与 userpb 同包）
-type userSvcImpl struct{}
+// ============================================================
+// 1. 业务实现：实现 UserServer 接口（protoc-gen-rpc-dispatcher 生成）
+//    这是 dispatcher 分发调用的目标，签名是 (ctx, req) (resp, error)
+// ============================================================
 
-func (s *userSvcImpl) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest) (*userpb.GetUserInfoResponse, error) {
+type bizImpl struct{}
+
+func (s *bizImpl) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest) (*userpb.GetUserInfoResponse, error) {
 	return &userpb.GetUserInfoResponse{
 		Id:       req.UserId,
 		Username: "alice",
@@ -21,7 +24,7 @@ func (s *userSvcImpl) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRe
 	}, nil
 }
 
-func (s *userSvcImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.LoginResponse, error) {
+func (s *bizImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.LoginResponse, error) {
 	return &userpb.LoginResponse{
 		Success:  true,
 		Token:    "jwt-token-xxx",
@@ -29,28 +32,49 @@ func (s *userSvcImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*use
 	}, nil
 }
 
-// 2. 启动时注册业务实现，一行搞定
+// 启动时注册业务实现，CallAPI 里就能自动分发到上面的业务方法
 func init() {
-	userpb.Register(&userSvcImpl{})
+	userpb.Register(&bizImpl{})
 }
 
-// 3. CallAPI 直接使用生成的调度函数
-func (s *userSvcImpl) CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-	return userpb.CallAPI(ctx, req)
-}
+// ============================================================
+// 2. gRPC handler：实现 go-micro 生成的 UserHandler 接口
+//    对外只暴露 CallAPI，其他方法不走网络
+// ============================================================
 
-// 4. 启动 gRPC 服务
-func main() {
-	lis, err := net.Listen("tcp", ":8080")
+type userHandler struct{}
+
+func (h *userHandler) CallAPI(ctx context.Context, req *commonpb.APIRequest, out *commonpb.APIResponse) error {
+	resp, err := userpb.CallAPI(ctx, req)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// 以下方法不通过 gRPC 暴露（由 CallAPI 内部调度），返回未实现
+func (h *userHandler) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest, out *userpb.GetUserInfoResponse) error {
+	return nil
+}
+
+func (h *userHandler) Login(ctx context.Context, req *userpb.LoginRequest, out *userpb.LoginResponse) error {
+	return nil
+}
+
+// ============================================================
+// 3. 启动 go-micro 服务
+// ============================================================
+
+func main() {
+	service := micro.NewService()
+	service.Init()
+
+	if err := userpb.RegisterUserHandler(service.Server(), &userHandler{}); err != nil {
+		log.Fatal(err)
 	}
 
-	srv := grpc.NewServer()
-	userpb.RegisterUserServer(srv, &userSvcImpl{})
-
-	log.Println("server listening at :8080")
-	if err := srv.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	if err := service.Run(); err != nil {
+		log.Fatal(err)
 	}
 }
