@@ -2,7 +2,6 @@
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	commonpb "example/proto/common/pb"
@@ -12,8 +11,7 @@ import (
 )
 
 // ============================================================
-// 1. 业务实现：实现 UserServer 接口（protoc-gen-rpc-dispatcher 生成）
-//    这是 dispatcher 分发调用的目标，签名是 (ctx, req) (resp, error)
+// 1. 实现业务接口（UserServer 由 protoc-gen-rpc-dispatcher 生成）
 // ============================================================
 
 type bizImpl struct{}
@@ -34,45 +32,20 @@ func (s *bizImpl) Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.
 	}, nil
 }
 
-// 启动时注册业务实现，CallAPI 里就能自动分发到上面的业务方法
-func init() {
-	userpb.Register(&bizImpl{})
-}
-
 // ============================================================
-// 2. gRPC handler：实现 go-micro 生成的 UserHandler 接口
-//    对外只暴露 CallAPI，其他方法不走网络
-// ============================================================
-
-type userHandler struct{}
-
-func (h *userHandler) CallAPI(ctx context.Context, req *commonpb.APIRequest, out *commonpb.APIResponse) error {
-	resp, err := userpb.CallAPI(ctx, req)
-	if err != nil {
-		return err
-	}
-	*out = *resp
-	return nil
-}
-
-// 以下方法不通过 gRPC 暴露（由 CallAPI 内部调度），返回未实现
-func (h *userHandler) GetUserInfo(ctx context.Context, req *userpb.GetUserInfoRequest, out *userpb.GetUserInfoResponse) error {
-	return nil
-}
-
-func (h *userHandler) Login(ctx context.Context, req *userpb.LoginRequest, out *userpb.LoginResponse) error {
-	return nil
-}
-
-// ============================================================
-// 3. 启动 go-micro 服务
+// 2. 启动 go-micro 服务
+//    Register 注册业务实现，生成的 userServiceHandler 自动实现 UserHandler
 // ============================================================
 
 func main() {
 	service := micro.NewService()
 	service.Init()
 
-	if err := userpb.RegisterUserHandler(service.Server(), &userHandler{}); err != nil {
+	// 注册业务实现
+	userpb.Register(&bizImpl{})
+
+	// 一行注册到 go-micro，无需手写 handler
+	if err := userpb.RegisterUserHandler(service.Server(), userpb.NewUserHandler()); err != nil {
 		log.Fatal(err)
 	}
 
@@ -82,7 +55,7 @@ func main() {
 }
 
 // ============================================================
-// 4. 客户端请求示例
+// 3. 客户端请求示例
 //    通过 go-micro client 调用 User 服务的 CallAPI
 // ============================================================
 
@@ -101,7 +74,7 @@ func Client() {
 	if err != nil {
 		log.Fatalf("call getUserInfo failed: %v", err)
 	}
-	fmt.Printf("getUserInfo -> code=%d msg=%s data=%s\n", resp.Code, resp.Message, resp.Data)
+	log.Printf("getUserInfo -> code=%d msg=%s data=%s", resp.Code, resp.Message, resp.Data)
 
 	// 示例 2: 登录
 	resp, err = svc.CallAPI(ctx, &commonpb.APIRequest{
@@ -111,7 +84,7 @@ func Client() {
 	if err != nil {
 		log.Fatalf("call login failed: %v", err)
 	}
-	fmt.Printf("login -> code=%d msg=%s data=%s\n", resp.Code, resp.Message, resp.Data)
+	log.Printf("login -> code=%d msg=%s data=%s", resp.Code, resp.Message, resp.Data)
 
 	// 示例 3: 不存在的 action，返回 404
 	resp, err = svc.CallAPI(ctx, &commonpb.APIRequest{
@@ -121,5 +94,5 @@ func Client() {
 	if err != nil {
 		log.Fatalf("call failed: %v", err)
 	}
-	fmt.Printf("notExist -> code=%d msg=%s\n", resp.Code, resp.Message)
+	log.Printf("notExist -> code=%d msg=%s", resp.Code, resp.Message)
 }

@@ -40,30 +40,45 @@ type UserServer interface {
 	Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error)
 }
 
-// HandlerWrap 是一个 action 处理函数
-type HandlerWrap func(ctx context.Context, data []byte) (*pb.APIResponse, error)
+type handlerWrap func(ctx context.Context, data []byte) (*pb.APIResponse, error)
 
-var (
+// userServiceHandler 实现了 go-micro 生成的 UserHandler 接口
+// 同时提供 CallAPI 的 action 分发能力
+type userServiceHandler struct {
 	srv      UserServer
-	handlers = make(map[string]HandlerWrap)
-)
+	handlers map[string]handlerWrap
+}
+
+var defaultHandler *userServiceHandler
 
 // Register 注册业务实现，必须在服务启动时调用
 func Register(s UserServer) {
-	srv = s
+	defaultHandler = &userServiceHandler{
+		srv:      s,
+		handlers: make(map[string]handlerWrap),
+	}
+	defaultHandler.register()
 }
 
-func init() {
-	handlers["getUserInfo"] = handleGetUserInfo
-	handlers["login"] = handleLogin
+// NewUserHandler 返回 go-micro 的 Handler 实现，供 RegisterUserHandler 使用
+func NewUserHandler() UserHandler {
+	if defaultHandler == nil {
+		panic("userpb.Register() must be called before NewUserHandler()")
+	}
+	return defaultHandler
 }
 
-func handleGetUserInfo(ctx context.Context, data []byte) (*pb.APIResponse, error) {
+func (u *userServiceHandler) register() {
+	u.handlers["getUserInfo"] = u.handleGetUserInfo
+	u.handlers["login"] = u.handleLogin
+}
+
+func (u *userServiceHandler) handleGetUserInfo(ctx context.Context, data []byte) (*pb.APIResponse, error) {
 	req := &GetUserInfoRequest{}
 	if err := json.Unmarshal(data, req); err != nil {
 		return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}, nil
 	}
-	res, err := srv.GetUserInfo(ctx, req)
+	res, err := u.srv.GetUserInfo(ctx, req)
 	if err != nil {
 		return &pb.APIResponse{Code: 500, Message: err.Error()}, nil
 	}
@@ -71,12 +86,12 @@ func handleGetUserInfo(ctx context.Context, data []byte) (*pb.APIResponse, error
 	return &pb.APIResponse{Code: 0, Data: d}, nil
 }
 
-func handleLogin(ctx context.Context, data []byte) (*pb.APIResponse, error) {
+func (u *userServiceHandler) handleLogin(ctx context.Context, data []byte) (*pb.APIResponse, error) {
 	req := &LoginRequest{}
 	if err := json.Unmarshal(data, req); err != nil {
 		return &pb.APIResponse{Code: 400, Message: fmt.Sprintf("json unmarshal error: %v", err)}, nil
 	}
-	res, err := srv.Login(ctx, req)
+	res, err := u.srv.Login(ctx, req)
 	if err != nil {
 		return &pb.APIResponse{Code: 500, Message: err.Error()}, nil
 	}
@@ -84,11 +99,36 @@ func handleLogin(ctx context.Context, data []byte) (*pb.APIResponse, error) {
 	return &pb.APIResponse{Code: 0, Data: d}, nil
 }
 
-// CallAPI 根据 action 分发请求，是统一的调度入口
-func CallAPI(ctx context.Context, req *pb.APIRequest) (*pb.APIResponse, error) {
-	handler, ok := handlers[req.Action]
+// CallAPI 实现 go-micro 的 Handler 接口，根据 action 分发请求
+func (u *userServiceHandler) CallAPI(ctx context.Context, req *pb.APIRequest, out *pb.APIResponse) error {
+	handler, ok := u.handlers[req.Action]
 	if !ok {
-		return &pb.APIResponse{Code: 404, Message: "action not found: " + req.Action}, nil
+		out.Code = 404
+		out.Message = "action not found: " + req.Action
+		return nil
 	}
-	return handler(ctx, []byte(req.Params))
+	resp, err := handler(ctx, []byte(req.Params))
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+func (u *userServiceHandler) GetUserInfo(ctx context.Context, req *GetUserInfoRequest, out *GetUserInfoResponse) error {
+	res, err := u.srv.GetUserInfo(ctx, req)
+	if err != nil {
+		return err
+	}
+	*out = *res
+	return nil
+}
+
+func (u *userServiceHandler) Login(ctx context.Context, req *LoginRequest, out *LoginResponse) error {
+	res, err := u.srv.Login(ctx, req)
+	if err != nil {
+		return err
+	}
+	*out = *res
+	return nil
 }

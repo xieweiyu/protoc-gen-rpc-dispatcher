@@ -119,6 +119,9 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 	// 包名：与 pb 包一致（来自 go_package）
 	pkgName := string(f.GoPackageName)
 
+	// handler 结构体名（如 userServiceHandler）
+	handlerName := toLowerCamelCase(string(svc.Desc.Name())) + "ServiceHandler"
+
 	// 获取 dispatcher RPC 的入参出参的 Go 导入路径（commonpb）
 	var commonpbAlias, commonpbImportPath string
 	if dispatcherInput != nil {
@@ -176,7 +179,7 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 	g.P(")")
 	g.P()
 
-	// 生成接口
+	// 生成 userServiceHandler 结构体
 	g.P("// ", svc.Desc.Name(), "Server 是 ", svc.Desc.Name(), " 服务需要实现的业务接口")
 	g.P("type ", svc.Desc.Name(), "Server interface {")
 	for _, rpc := range rpcs {
@@ -185,39 +188,60 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 	g.P("}")
 	g.P()
 
-	// 生成全局 handlers map 和 srv 变量
-	g.P("// HandlerWrap 是一个 action 处理函数")
-	g.P("type HandlerWrap func(ctx context.Context, data []byte) (*", commonpbAlias, ".APIResponse, error)")
+	// handlerWrap 是 action 处理函数类型
+	g.P("type handlerWrap func(ctx context.Context, data []byte) (*", commonpbAlias, ".APIResponse, error)")
 	g.P()
-	g.P("var (")
+
+	// 生成 userServiceHandler 结构体（实现 go-micro 生成的 Handler 接口）
+	g.P("// ", handlerName, " 实现了 go-micro 生成的 ", svc.Desc.Name(), "Handler 接口")
+	g.P("// 同时提供 CallAPI 的 action 分发能力")
+	g.P("type ", handlerName, " struct {")
 	g.P("    srv      ", svc.Desc.Name(), "Server")
-	g.P("    handlers = make(map[string]HandlerWrap)")
-	g.P(")")
+	g.P("    handlers map[string]handlerWrap")
+	g.P("}")
+	g.P()
+
+	// 生成 defaultHandler 全局变量
+	g.P("var defaultHandler *", handlerName)
 	g.P()
 
 	// 生成 Register 函数
 	g.P("// Register 注册业务实现，必须在服务启动时调用")
 	g.P("func Register(s ", svc.Desc.Name(), "Server) {")
-	g.P("    srv = s")
+	g.P("    defaultHandler = &", handlerName, "{")
+	g.P("        srv:      s,")
+	g.P("        handlers: make(map[string]handlerWrap),")
+	g.P("    }")
+	g.P("    defaultHandler.register()")
 	g.P("}")
 	g.P()
 
-	// 生成 init() 注册所有 action
-	g.P("func init() {")
+	// 生成 NewHandler 函数
+	g.P("// New", svc.Desc.Name(), "Handler 返回 go-micro 的 Handler 实现，供 Register", svc.Desc.Name(), "Handler 使用")
+	g.P("func New", svc.Desc.Name(), "Handler() ", svc.Desc.Name(), "Handler {")
+	g.P("    if defaultHandler == nil {")
+	g.P("        panic(\"", pkgName, ".Register() must be called before New", svc.Desc.Name(), "Handler()\")")
+	g.P("    }")
+	g.P("    return defaultHandler")
+	g.P("}")
+	g.P()
+
+	// 生成 register() 方法：注册所有 action
+	g.P("func (u *", handlerName, ") register() {")
 	for _, rpc := range rpcs {
-		g.P("    handlers[\"", rpc.ActionName, "\"] = handle", rpc.Name)
+		g.P("    u.handlers[\"", rpc.ActionName, "\"] = u.handle", rpc.Name)
 	}
 	g.P("}")
 	g.P()
 
-	// 生成每个 RPC 的独立 handler 函数
+	// 生成每个 RPC 的 dispatcher handler
 	for _, rpc := range rpcs {
-		g.P("func handle", rpc.Name, "(ctx context.Context, data []byte) (*", commonpbAlias, ".APIResponse, error) {")
+		g.P("func (u *", handlerName, ") handle", rpc.Name, "(ctx context.Context, data []byte) (*", commonpbAlias, ".APIResponse, error) {")
 		g.P("    req := &", rpc.RequestType, "{}")
 		g.P("    if err := json.Unmarshal(data, req); err != nil {")
 		g.P("        return &", commonpbAlias, ".APIResponse{Code: 400, Message: fmt.Sprintf(\"json unmarshal error: %v\", err)}, nil")
 		g.P("    }")
-		g.P("    res, err := srv.", rpc.Name, "(ctx, req)")
+		g.P("    res, err := u.srv.", rpc.Name, "(ctx, req)")
 		g.P("    if err != nil {")
 		g.P("        return &", commonpbAlias, ".APIResponse{Code: 500, Message: err.Error()}, nil")
 		g.P("    }")
@@ -227,15 +251,36 @@ func genServiceDispatcher(gen *protogen.Plugin, f *protogen.File, svc *protogen.
 		g.P()
 	}
 
-	// 生成 CallAPI 分发函数
-	g.P("// CallAPI 根据 action 分发请求，是统一的调度入口")
-	g.P("func CallAPI(ctx context.Context, req *", commonpbAlias, ".APIRequest) (*", commonpbAlias, ".APIResponse, error) {")
-	g.P("    handler, ok := handlers[req.Action]")
+	// 生成 CallAPI 方法（实现 go-micro Handler 接口）
+	g.P("// CallAPI 实现 go-micro 的 Handler 接口，根据 action 分发请求")
+	g.P("func (u *", handlerName, ") CallAPI(ctx context.Context, req *", commonpbAlias, ".APIRequest, out *", commonpbAlias, ".APIResponse) error {")
+	g.P("    handler, ok := u.handlers[req.Action]")
 	g.P("    if !ok {")
-	g.P("        return &", commonpbAlias, ".APIResponse{Code: 404, Message: \"action not found: \" + req.Action}, nil")
+	g.P("        out.Code = 404")
+	g.P("        out.Message = \"action not found: \" + req.Action")
+	g.P("        return nil")
 	g.P("    }")
-	g.P("    return handler(ctx, []byte(req.Params))")
+	g.P("    resp, err := handler(ctx, []byte(req.Params))")
+	g.P("    if err != nil {")
+	g.P("        return err")
+	g.P("    }")
+	g.P("    *out = *resp")
+	g.P("    return nil")
 	g.P("}")
+	g.P()
+
+	// 生成每个 RPC 的 micro Handler 转发方法（直接调用业务实现）
+	for _, rpc := range rpcs {
+		g.P("func (u *", handlerName, ") ", rpc.Name, "(ctx context.Context, req *", rpc.RequestType, ", out *", rpc.ResponseType, ") error {")
+		g.P("    res, err := u.srv.", rpc.Name, "(ctx, req)")
+		g.P("    if err != nil {")
+		g.P("        return err")
+		g.P("    }")
+		g.P("    *out = *res")
+		g.P("    return nil")
+		g.P("}")
+		g.P()
+	}
 
 	return nil
 }
