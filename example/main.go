@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func main() {
 // 网关场景: POST /user/getUserInfo -> CallAPI{Action: "getUserInfo", Params: "..."}
 func Client() {
 	// 创建 User 服务客户端（"user" 是注册到服务发现的服务名）
-	svc := userpb.NewUserService("user", client.DefaultClient)
+	svc := userpb.NewUserService("user", client.NewClient())
 	ctx := context.Background()
 
 	// 示例 1: 获取用户信息
